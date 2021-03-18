@@ -670,58 +670,62 @@ UINT response_payload = 0;
 NX_AZURE_IOT_JSON_READER json_reader;
 NX_AZURE_IOT_JSON_WRITER json_builder;
 
-    if (sample_context_ptr -> state != SAMPLE_STATE_CONNECTED)
+    /* Loop to receive command message.  */
+    while (1)
     {
-        return;
-    }
 
-    if ((status = nx_azure_iot_pnp_client_command_receive(&(sample_context_ptr -> iotpnp_client),
-                                                          &component_name_ptr, &component_name_length,
-                                                          &command_name_ptr, &command_name_length,
-                                                          &context_ptr, &context_length,
-                                                          &json_reader, NX_WAIT_FOREVER)))
-    {
-        printf("Command receive failed!: error code = 0x%08x\r\n", status);
-        return;
-    }
+        if (sample_context_ptr -> state != SAMPLE_STATE_CONNECTED)
+        {
+            return;
+        }
 
-    printf("Received command: %.*s", (INT)command_name_length, (CHAR *)command_name_ptr);
-    printf("\r\n");
+        if ((status = nx_azure_iot_pnp_client_command_receive(&(sample_context_ptr -> iotpnp_client),
+                                                              &component_name_ptr, &component_name_length,
+                                                              &command_name_ptr, &command_name_length,
+                                                              &context_ptr, &context_length,
+                                                              &json_reader, NX_NO_WAIT)))
+        {
+            return;
+        }
 
-    if ((status = nx_azure_iot_json_writer_with_buffer_init(&json_builder,
-                                                            scratch_buffer,
-                                                            sizeof(scratch_buffer))))
-    {
-        printf("Failed to initialize json builder response \r\n");
+        printf("Received command: %.*s", (INT)command_name_length, (CHAR *)command_name_ptr);
+        printf("\r\n");
+
+        if ((status = nx_azure_iot_json_writer_with_buffer_init(&json_builder,
+                                                                scratch_buffer,
+                                                                sizeof(scratch_buffer))))
+        {
+            printf("Failed to initialize json builder response \r\n");
+            nx_azure_iot_json_reader_deinit(&json_reader);
+            return;
+        }
+
+        if ((command_name_length == (sizeof(report_command_name) - 1)) &&
+            (memcmp((VOID *)command_name_ptr, (VOID *)report_command_name,
+                    sizeof(report_command_name) - 1) == 0))
+        {
+            if (sample_get_maxmin_report(&json_reader, &json_builder) != NX_AZURE_IOT_SUCCESS)
+            {
+                dm_status = SAMPLE_COMMAND_ERROR_STATUS;
+            }
+            else
+            {
+                dm_status = SAMPLE_COMMAND_SUCCESS_STATUS;
+                response_payload = nx_azure_iot_json_writer_get_bytes_used(&json_builder);
+            }
+        }
+
         nx_azure_iot_json_reader_deinit(&json_reader);
-        return;
-    }
 
-    if ((command_name_length == (sizeof(report_command_name) - 1)) &&
-        (memcmp((VOID *)command_name_ptr, (VOID *)report_command_name,
-                sizeof(report_command_name) - 1) == 0))
-    {
-        if (sample_get_maxmin_report(&json_reader, &json_builder) != NX_AZURE_IOT_SUCCESS)
+        if ((status = nx_azure_iot_pnp_client_command_message_response(&(sample_context_ptr -> iotpnp_client), dm_status,
+                                                                       context_ptr, context_length, scratch_buffer,
+                                                                       response_payload, NX_WAIT_FOREVER)))
         {
-            dm_status = SAMPLE_COMMAND_ERROR_STATUS;
+            printf("Command response failed!: error code = 0x%08x\r\n", status);
         }
-        else
-        {
-            dm_status = SAMPLE_COMMAND_SUCCESS_STATUS;
-            response_payload = nx_azure_iot_json_writer_get_bytes_used(&json_builder);
-        }
+
+        nx_azure_iot_json_writer_deinit(&json_builder);
     }
-
-    nx_azure_iot_json_reader_deinit(&json_reader);
-
-    if ((status = nx_azure_iot_pnp_client_command_message_response(&(sample_context_ptr -> iotpnp_client), dm_status,
-                                                                   context_ptr, context_length, scratch_buffer,
-                                                                   response_payload, NX_WAIT_FOREVER)))
-    {
-        printf("Command response failed!: error code = 0x%08x\r\n", status);
-    }
-
-    nx_azure_iot_json_writer_deinit(&json_builder);
 }
 
 static void sample_device_desired_property_action(SAMPLE_CONTEXT *context)

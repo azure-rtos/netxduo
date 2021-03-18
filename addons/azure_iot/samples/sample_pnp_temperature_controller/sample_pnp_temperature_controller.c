@@ -667,83 +667,87 @@ NX_AZURE_IOT_JSON_READER json_reader;
 UINT status_code;
 UINT response_length;
 
-    if (sample_context_ptr -> state != SAMPLE_STATE_CONNECTED)
+    /* Loop to receive command message.  */
+    while (1)
     {
-        return;
-    }
 
-    if ((status = nx_azure_iot_pnp_client_command_receive(&(sample_context_ptr -> iotpnp_client),
-                                                          &component_name_ptr, &component_name_length,
-                                                          &pnp_command_name_ptr, &pnp_command_name_length,
-                                                          &context_ptr, &context_length,
-                                                          &json_reader, NX_WAIT_FOREVER)))
-    {
-        printf("Command receive failed!: error code = 0x%08x\r\n", status);
-        return;
-    }
+        if (sample_context_ptr -> state != SAMPLE_STATE_CONNECTED)
+        {
+            return;
+        }
 
-    if (component_name_ptr != NX_NULL)
-    {
-        printf("Received component: %.*s ", component_name_length, component_name_ptr);
-    }
-    else
-    {
-        printf("Received component: root component ");
-    }
+        if ((status = nx_azure_iot_pnp_client_command_receive(&(sample_context_ptr -> iotpnp_client),
+                                                              &component_name_ptr, &component_name_length,
+                                                              &pnp_command_name_ptr, &pnp_command_name_length,
+                                                              &context_ptr, &context_length,
+                                                              &json_reader, NX_NO_WAIT)))
+        {
+            return;
+        }
 
-    printf("command: %.*s", pnp_command_name_length, (CHAR *)pnp_command_name_ptr);
-    printf("\r\n");
+        if (component_name_ptr != NX_NULL)
+        {
+            printf("Received component: %.*s ", component_name_length, component_name_ptr);
+        }
+        else
+        {
+            printf("Received component: root component ");
+        }
 
-    if ((status = nx_azure_iot_json_writer_with_buffer_init(&json_writer,
-                                                            scratch_buffer,
-                                                            sizeof(scratch_buffer))))
-    {
-        printf("Failed to initialize json builder response \r\n");
+        printf("command: %.*s", pnp_command_name_length, (CHAR *)pnp_command_name_ptr);
+        printf("\r\n");
+
+        if ((status = nx_azure_iot_json_writer_with_buffer_init(&json_writer,
+                                                                scratch_buffer,
+                                                                sizeof(scratch_buffer))))
+        {
+            printf("Failed to initialize json builder response \r\n");
+            nx_azure_iot_json_reader_deinit(&json_reader);
+            return;
+        }
+
+        if ((status = sample_pnp_thermostat_process_command(&sample_thermostat_1, component_name_ptr,
+                                                            component_name_length, pnp_command_name_ptr,
+                                                            pnp_command_name_length, &json_reader,
+                                                            &json_writer, &status_code)) == NX_AZURE_IOT_SUCCESS)
+        {
+            printf("Successfully executed command %.*s on thermostat 1\r\n", pnp_command_name_length, pnp_command_name_ptr);
+            response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
+        }
+        else if ((status = sample_pnp_thermostat_process_command(&sample_thermostat_2, component_name_ptr,
+                                                                 component_name_length, pnp_command_name_ptr,
+                                                                 pnp_command_name_length, &json_reader,
+                                                                 &json_writer, &status_code)) == NX_AZURE_IOT_SUCCESS)
+        {
+            printf("Successfully executed command %.*s on thermostat 2\r\n", pnp_command_name_length, pnp_command_name_ptr);
+            response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
+        }
+        else if((status = sample_pnp_temp_controller_process_command(component_name_ptr, component_name_length,
+                                                                     pnp_command_name_ptr, pnp_command_name_length,
+                                                                     &json_reader, &json_writer,
+                                                                     &status_code)) == NX_AZURE_IOT_SUCCESS)
+        {
+            printf("Successfully executed command %.*s  controller \r\n", pnp_command_name_length, pnp_command_name_ptr);
+            response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
+        }
+        else
+        {
+            printf("Failed to find any handler for command %.*s\r\n", pnp_command_name_length, pnp_command_name_ptr);
+            status_code = SAMPLE_COMMAND_NOT_FOUND_STATUS;
+            response_length = 0;
+        }
+
         nx_azure_iot_json_reader_deinit(&json_reader);
-        return;
-    }
 
-    if ((status = sample_pnp_thermostat_process_command(&sample_thermostat_1, component_name_ptr,
-                                                        component_name_length, pnp_command_name_ptr,
-                                                        pnp_command_name_length, &json_reader,
-                                                        &json_writer, &status_code)) == NX_AZURE_IOT_SUCCESS)
-    {
-        printf("Successfully executed command %.*s on thermostat 1\r\n", pnp_command_name_length, pnp_command_name_ptr);
-        response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
-    }
-    else if ((status = sample_pnp_thermostat_process_command(&sample_thermostat_2, component_name_ptr,
-                                                             component_name_length, pnp_command_name_ptr,
-                                                             pnp_command_name_length, &json_reader,
-                                                             &json_writer, &status_code)) == NX_AZURE_IOT_SUCCESS)
-    {
-        printf("Successfully executed command %.*s on thermostat 2\r\n", pnp_command_name_length, pnp_command_name_ptr);
-        response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
-    }
-    else if((status = sample_pnp_temp_controller_process_command(component_name_ptr, component_name_length,
-                                                                 pnp_command_name_ptr, pnp_command_name_length,
-                                                                 &json_reader, &json_writer,
-                                                                 &status_code)) == NX_AZURE_IOT_SUCCESS)
-    {
-        printf("Successfully executed command %.*s  controller \r\n", pnp_command_name_length, pnp_command_name_ptr);
-        response_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
-    }
-    else
-    {
-        printf("Failed to find any handler for command %.*s\r\n", pnp_command_name_length, pnp_command_name_ptr);
-        status_code = SAMPLE_COMMAND_NOT_FOUND_STATUS;
-        response_length = 0;
-    }
+        if ((status = nx_azure_iot_pnp_client_command_message_response(&(sample_context_ptr -> iotpnp_client), status_code,
+                                                                       context_ptr, context_length, scratch_buffer,
+                                                                       response_length, NX_WAIT_FOREVER)))
+        {
+            printf("Command response failed!: error code = 0x%08x\r\n", status);
+        }
 
-    nx_azure_iot_json_reader_deinit(&json_reader);
-
-    if ((status = nx_azure_iot_pnp_client_command_message_response(&(sample_context_ptr -> iotpnp_client), status_code,
-                                                                   context_ptr, context_length, scratch_buffer,
-                                                                   response_length, NX_WAIT_FOREVER)))
-    {
-        printf("Command response failed!: error code = 0x%08x\r\n", status);
+        nx_azure_iot_json_writer_deinit(&json_writer);
     }
-
-    nx_azure_iot_json_writer_deinit(&json_writer);
 }
 
 static VOID sample_desired_properties_parse(NX_AZURE_IOT_PNP_CLIENT *pnp_client_ptr,
